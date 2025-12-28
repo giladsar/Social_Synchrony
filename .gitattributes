@@ -1,2 +1,8 @@
 # Auto detect text files and perform LF normalization
+git lfs track "*.pt"
+git lfs track "*.mp4"
+git lfs track "*.so"
+git lfs track "*.dylib"
+
+
 * text=auto

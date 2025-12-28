@@ -1,0 +1,27 @@
+# --- Python & Environments ---
+__pycache__/
+*.py[cod]
+*$py.class
+yolo_env/
+venv/
+.env
+
+# --- Mac Specific ---
+.DS_Store
+
+# --- YOLO & Ultralytics ---
+# Ignore the weights you download
+*.pt
+# Ignore the training/validation runs folder
+runs/
+
+# --- Data & Videos (The "Heavy" Stuff) ---
+# Ignore your source videos and generated outputs
+images/*.mp4
+*.mp4
+*.avi
+*.csv
+
+# --- IDEs ---
+.vscode/
+.idea/
