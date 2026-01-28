@@ -27,3 +27,14 @@ images/*.mp4
 .idea/
 Social Synchrony Analysis.pptx
 ~$Social Synchrony Analysis.pptx
+
+# --- LaTeX Build Files ---
+*.aux
+*.log
+*.out
+*.toc
+*.bbl
+*.blg
+*.synctex.gz
+*.fdb_latexmk
+*.fls
