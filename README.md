@@ -78,10 +78,14 @@ The notebook includes:
 ```
 Social_Synchrony/
 ├── Social_Synchrony.ipynb    # Main analysis notebook
+├── Final_Report.tex           # Academic report (LaTeX)
+├── Final_Report.pdf           # Compiled report (generated)
+├── REPORT_README.md           # Report generation guide
+├── compile_report.sh          # Report compilation script
 ├── data_output/               # Output data and results
 ├── images/                    # Sample images and visualizations
-├── . gitignore                # Git ignore rules
-└── . gitattributes            # Git attributes configuration
+├── .gitignore                 # Git ignore rules
+└── .gitattributes             # Git attributes configuration
 ```
 
 ## 🔬 Methodology
@@ -107,6 +111,27 @@ Analysis results are saved to the `data_output/` directory and include:
 - Tracking data for multiple individuals
 - Synchrony metrics and statistics
 - Visualization frames and plots
+
+## 📄 Final Report
+
+A comprehensive academic report documenting the project methodology, results, and findings is available:
+
+- **Report Document**: `Final_Report.tex` (LaTeX source)
+- **Instructions**: See `REPORT_README.md` for compilation guide
+- **Compilation**: Run `./compile_report.sh` to generate PDF
+
+The report includes all required sections for academic submission:
+- Cover Page with project details
+- Introduction and research motivation
+- Complete dataset description with sample images
+- Methods and implementation details
+- Results and visualizations
+- Discussion of findings and limitations
+- Conclusions and key takeaways
+- Bibliography with 15 academic references
+- Supplementary material (code documentation)
+
+**Format**: 11pt font, 1.5 line spacing, ~8 pages (excluding appendices)
 
 ## 🤝 Contributing
 
