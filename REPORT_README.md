@@ -2,6 +2,8 @@
 
 This directory contains the final academic report for the Social Synchrony project.
 
+> 📚 **Quick Reference**: See `QUICK_REFERENCE.md` for a comprehensive guide to the project structure, workflow, and key concepts.
+
 ## Report Structure
 
 The report (`Final_Report.tex`) includes all required sections as specified in the project requirements:
