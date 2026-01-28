@@ -294,7 +294,7 @@ For final submission, ensure:
 - [ ] Report PDF generated (`Final_Report.pdf`)
 - [ ] All sections present (9 required sections)
 - [ ] Sample images included in report
-- [ ] Bibliography has 10+ references
+- [ ] Bibliography has 15+ references
 - [ ] Code is well-documented with comments
 - [ ] Notebook has markdown cells explaining methodology
 - [ ] Formatting: 11pt font, 1.5 line spacing

@@ -192,7 +192,7 @@ Before submission, verify:
 - [ ] Results section includes findings and visuals
 - [ ] Discussion interprets results and notes limitations
 - [ ] Conclusions summarize key outcomes
-- [ ] Bibliography has at least 10 references with proper formatting
+- [ ] Bibliography has 15 references with proper formatting
 - [ ] Supplementary Material section references the code
 - [ ] Font size is 11pt
 - [ ] Line spacing is 1.5
