@@ -29,11 +29,11 @@
 % Title information
 \title{\textbf{Social Synchrony Analysis Using YOLO Pose Estimation}}
 \author{
-    Gilad Sar \\
+    Gilad Sarusi \\
     \textit{GitHub: @giladsar} \\
     \\
-    Course Number: [TO BE FILLED] \\
-    Date: January 28, 2026
+    Course Number: 001-2902-31 \\
+    Date: February 22, 2026
 }
 \date{}
 
@@ -206,19 +206,7 @@ The choice of YOLO over traditional pose estimation approaches (such as MPI heat
 \end{itemize}
 
 \subsection{Video Processing Pipeline}
-Video frames are processed sequentially:
 
-\begin{lstlisting}[language=Python, caption=Video loading and frame extraction]
-# Load video
-cap = cv2.VideoCapture(video_path)
-frames = []
-while cap.isOpened():
-    ret, frame = cap.read()
-    if not ret:
-        break
-    frames.append(frame)
-cap.release()
-\end{lstlisting}
 
 To enhance pose detection quality, frame sharpening is applied:
 \begin{itemize}
@@ -451,7 +439,7 @@ Table~\ref{tab:rolling} summarises the phase classification results.
 Across all three body regions, the interaction was dominated by uncoupled motion ($>93\%$ of windows). Synchronised windows comprised between 3.7\% and 5.0\% of the recording, while turn-taking windows were rare ($<2\%$). These results are consistent with the lagged cross-correlation findings and suggest that, globally, the dyad showed limited movement coordination in this recording.
 
 \subsubsection{Dyadic Co-Crossing (Approach Synchrony)}
-Figure~\ref{fig:head_traj} shows the spatial trajectories of each individual's head centroid across the full recording. Person 1 (left panel) exhibits a wider lateral range of motion compared to Person 2 (right panel).
+The following figures show the spatial trajectories of each individual's head centroid across the full recording. Person 1 (left panel) exhibits a wider lateral range of motion compared to Person 2 (right panel).
 
 \begin{figure}[H]
     \centering
@@ -547,12 +535,6 @@ Compared to traditional approaches (Human-impression and coding via observation)
 
 \end{itemize}
 
-\textbf{Trade-offs:}
-\begin{itemize}
-    \item Requires high-quality video recordings
-    \item May miss subtle movements captured by sensors
-    \item Computational requirements for processing
-\end{itemize}
 
 \subsection{Practical Applications}
 
@@ -588,7 +570,6 @@ This project successfully demonstrates the feasibility and effectiveness of usin
     \item \textbf{Technical Innovation}: Successfully applied YOLO11 pose estimation to social interaction analysis
     \item \textbf{Automated Tracking}: Implemented reliable identity tracking for dyadic interactions
     \item \textbf{Quantitative Metrics}: Computed multiple complementary measures of synchrony (cross-correlation, co-crossing)
-    \item \textbf{Validation}: Demonstrated processing of real interaction data with meaningful results
 \end{enumerate}
 
 \subsection{Technical Achievements}
