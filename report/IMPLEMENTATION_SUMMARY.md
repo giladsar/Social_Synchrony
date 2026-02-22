@@ -12,7 +12,7 @@ This repository now includes a complete academic report structure meeting all re
 
 A complete LaTeX document with all 9 required sections:
 
-1. **Cover Page** - Includes project title, author (Gilad Sar), date (January 28, 2026), and placeholder for course number
+1. **Cover Page** - Includes project title, author (Gilad Sarusi), date (January 28, 2026), and placeholder for course number
 2. **Introduction** - Background on social synchrony, research motivation, and main objectives
 3. **Dataset Description** - Complete with:
    - Sample images (references to `data_output/*.png` files)

@@ -84,7 +84,7 @@ The dataset consists of video recordings of dyadic interactions. Sample frames f
 
 \begin{figure}[H]
     \centering
-    \includegraphics[width=0.8\textwidth]{data_output/annotated_frame_450.png}
+    \includegraphics[width=0.8\textwidth]{../data_output/annotated_frame_450.png}
     \caption{Sample frame showing pose estimation with detected keypoints for two individuals. The YOLO model identifies 17 body keypoints (COCO format) for each person.}
     \label{fig:sample_frames}
 \end{figure}
@@ -96,8 +96,8 @@ The dataset consists of video recordings of dyadic interactions. Sample frames f
     \item \textbf{Format}: MP4 video file
     \item \textbf{Total Frames}: 3,864 frames
     \item \textbf{Frame Rate}: Approximately 25 frames per second (FPS)
-    \item \textbf{Duration}: Approximately 154.6 seconds (2.6 minutes)
-    \item \textbf{Subjects}: Two individuals engaged in social interaction
+    \item \textbf{Duration}: Approximately 154.6 seconds (2.6 minutes). For the t ime being those short videos would serve as a placeholder, given that the real study videos would be of 15 minutes long
+    \item \textbf{Subjects}: Two individuals engaged in social interaction. sitting in a lab setting, facing each other, and engaging in natural conversation
 \end{itemize}
 
 \textbf{Pose Keypoint Format:}
@@ -121,13 +121,13 @@ Each keypoint includes x and y coordinates along with a confidence score indicat
 \subsection{Data Acquisition}
 The video data was acquired from laboratory recordings designed to capture dyadic social interactions. The recording setup ensures clear visibility of both participants throughout the interaction period. The data represents natural social interactions in a controlled laboratory environment.
 
-According to the project documentation, the SRL (Social Rhythms Laboratory) dataset typically includes:
+According to the project documentation, the SRL (Social Relation Laboratory) dataset typically includes:
 \begin{itemize}
     \item One video capturing both individuals (dyad video)
-    \item Two individual videos capturing each person separately
+    \item Two individual videos capturing each person separately.
 \end{itemize}
 
-For this analysis, the dyad video was utilized as it provides the necessary information for assessing interpersonal synchrony.
+For this analysis, given the scope and deadline of this project, only the dyad video was utilized as it provides the necessary information for assessing interpersonal synchrony.
 
 \subsection{Data Access}
 \begin{itemize}
@@ -293,8 +293,8 @@ Figure~\ref{fig:preprocessing} illustrates the effects of different preprocessin
 
 \begin{figure}[H]
     \centering
-    \includegraphics[width=0.45\textwidth]{data_output/original_frame_450.png}
-    \includegraphics[width=0.45\textwidth]{data_output/sharpened_frame_450.png}
+    \includegraphics[width=0.45\textwidth]{../data_output/original_frame_450.png}
+    \includegraphics[width=0.45\textwidth]{../data_output/sharpened_frame_450.png}
     \caption{Comparison of original frame (left) and sharpened frame (right) used for pose estimation. Sharpening enhances edge details, improving keypoint detection accuracy.}
     \label{fig:preprocessing}
 \end{figure}
@@ -377,21 +377,22 @@ Several limitations should be considered when interpreting these results:
 \begin{itemize}
     \item \textbf{2D Limitations}: Pose estimation from monocular video captures only 2D projections, missing depth information
     \item \textbf{Occlusions}: Overlapping individuals or objects can affect keypoint detection
-    \item \textbf{Camera Perspective}: Analysis is dependent on camera angle and position
     \item \textbf{Context Dependence}: Synchrony metrics may vary based on interaction type and context
     \item \textbf{Preprocessing Sensitivity}: Results can be affected by smoothing parameters and threshold choices
 \end{itemize}
 
 \subsection{Comparison with Traditional Methods}
 
-Compared to traditional approaches (sensor-based measurements, manual coding), this computer vision approach offers:
+Compared to traditional approaches (Human-impression and coding via observation), this computer vision approach offers:
 
 \textbf{Advantages:}
 \begin{itemize}
-    \item Non-invasive data collection
+
     \item Richer spatial information
     \item Lower cost per analysis
-    \item Retrospective analysis of existing video data
+    \item Retrospective analysis of existing video data - We are able to apply this framework into any video that share the same spatial properties (e.g., two people sitting across from each other, with a similar camera angle and distance) without the need to set up a new recording environment or use specialized sensors.
+    \item Overcoming reliability between jugdes- Given the subjective nature of human coding, inter-rater reliability can be a significant concern. The automated approach provides consistent, objective measurements that are not influenced by individual biases.
+
 \end{itemize}
 
 \textbf{Trade-offs:}
@@ -406,11 +407,8 @@ Compared to traditional approaches (sensor-based measurements, manual coding), t
 This approach has potential applications in several domains:
 
 \begin{itemize}
-    \item \textbf{Psychology Research}: Studying interpersonal dynamics in various contexts
-    \item \textbf{Clinical Settings}: Assessing social functioning in developmental or psychiatric conditions
-    \item \textbf{Education}: Analyzing teacher-student or peer interactions
+    \item \textbf{Psychology Research}: Studying interpersonal dynamics in various contexts. With the ongoing studies conductedd in our libratory, we can apply this method to analyze synchrony patterns in setting (e.g., romantic vs. platonic) and interaction types (e.g., cooperative vs. competitive).
     \item \textbf{Human-Computer Interaction}: Evaluating user engagement and coordination
-    \item \textbf{Sports Science}: Studying team coordination and performance
 \end{itemize}
 
 \subsection{Future Directions}
@@ -598,77 +596,6 @@ The \texttt{Social\_Synchrony.ipynb} notebook contains:
     \end{itemize}
 \end{enumerate}
 
-\subsection{Key Code Snippets}
-
-\subsubsection{Pose Estimation}
-\begin{lstlisting}[language=Python]
-from ultralytics import YOLO
-
-# Load YOLO11n-pose model
-model = YOLO('yolo11n-pose.pt')
-
-# Process video
-results = model.predict(
-    source=video_path,
-    stream=True,
-    save=False,
-    conf=0.5
-)
-\end{lstlisting}
-
-\subsubsection{Identity Tracking}
-\begin{lstlisting}[language=Python]
-def track_identities(current_boxes, prev_boxes):
-    """Assign consistent IDs using IoU matching"""
-    ious = compute_iou_matrix(current_boxes, prev_boxes)
-    assignments = greedy_assignment(ious)
-    return assignments
-\end{lstlisting}
-
-\subsubsection{Velocity Calculation}
-\begin{lstlisting}[language=Python]
-def compute_velocity(keypoints):
-    """Calculate frame-to-frame velocity magnitude"""
-    dx = np.diff(keypoints[:, 0])
-    dy = np.diff(keypoints[:, 1])
-    velocity = np.sqrt(dx**2 + dy**2)
-    return velocity
-\end{lstlisting}
-
-\subsubsection{Cross-Correlation}
-\begin{lstlisting}[language=Python]
-from scipy.signal import correlate
-
-def compute_synchrony(signal1, signal2):
-    """Compute cross-correlation between two signals"""
-    correlation = correlate(signal1, signal2, mode='full')
-    correlation = correlation / (len(signal1) * signal1.std() * signal2.std())
-    return correlation
-\end{lstlisting}
-
-\subsection{Dependencies}
-Required Python packages:
-\begin{lstlisting}
-torch>=2.0.0
-numpy==1.26.4
-opencv-python==4.10.0
-ultralytics==8.3.241
-matplotlib>=3.5.0
-scipy>=1.9.0
-\end{lstlisting}
-
-\subsection{Installation Instructions}
-\begin{lstlisting}[language=bash]
-# Clone repository
-git clone https://github.com/giladsar/Social_Synchrony.git
-cd Social_Synchrony
-
-# Install dependencies
-pip install torch numpy opencv-python ultralytics matplotlib scipy
-
-# Open notebook
-jupyter notebook Social_Synchrony.ipynb
-\end{lstlisting}
 
 \subsection{Sample Outputs}
 The \texttt{data\_output/} directory contains sample outputs:
@@ -692,7 +619,7 @@ To reproduce the analysis:
 For questions, issues, or collaboration:
 \begin{itemize}
     \item \textbf{GitHub Issues}: \url{https://github.com/giladsar/Social_Synchrony/issues}
-    \item \textbf{Repository Owner}: Gilad Sar (@giladsar)
+    \item \textbf{Repository Owner}: Gilad Sarus (@giladsar)
 \end{itemize}
 
 \end{document}
