@@ -143,18 +143,49 @@ The repository includes all necessary code for reproducing the analysis, along w
 \section{Methods and Implementation}
 
 \subsection{Overview of Workflow}
-The social synchrony analysis pipeline consists of several key stages:
+The social synchrony analysis pipeline transforms raw video footage into quantitative synchrony metrics through eight sequential stages. Each stage builds directly on the output of the previous one, creating a clean separation of concerns from raw data ingestion to statistical inference.
 
+\vspace{0.5em}
+\noindent\textbf{Stage 1 — Environment Setup \& Hardware Detection}\\
+The pipeline verifies that all required packages (PyTorch, OpenCV, NumPy, Ultralytics) are available at the expected versions. It then queries the runtime for GPU (CUDA) or Apple Silicon (MPS) acceleration. If found, inference is routed to the accelerator; otherwise, the pipeline falls back to CPU. This step ensures reproducibility and prevents silent version mismatches.
+
+\vspace{0.5em}
+\noindent\textbf{Stage 2 — Model Initialisation}\\
+The YOLO11n-pose model weights (\texttt{yolo11n-pose.pt}) are loaded from the Ultralytics hub. The model is configured with a detection confidence threshold (\texttt{CONF\_THRES~=~0.3}) below which detections are discarded, and a fixed input resolution optimised for the video dimensions.
+
+\vspace{0.5em}
+\noindent\textbf{Stage 3 — Video Ingestion \& Frame Preprocessing}\\
+OpenCV reads the video file frame-by-frame, extracting the frame rate (\(fps = 25.006\)) and deriving the temporal step \(dt = 1/fps \approx 0.040\,\text{s}\). Before pose estimation, each frame undergoes \textit{unsharp masking}: a Gaussian blur is subtracted from the original to amplify edges, producing crisper joint boundaries and improving downstream keypoint localisation.
+
+\vspace{0.5em}
+\noindent\textbf{Stage 4 — Batch Pose Estimation}\\
+Each preprocessed frame is passed through YOLO11n-pose, which returns, for every detected person: (a) a bounding box \([x_1, y_1, x_2, y_2]\), and (b) an array of 17 keypoints in COCO format, each encoded as \([x, y, \text{confidence}]\). All detections across all 3,864 frames are stored in a list-of-lists structure (\texttt{raw\_estimators}).
+
+\vspace{0.5em}
+\noindent\textbf{Stage 5 — Identity Tracking (IoU-based Greedy Assignment)}\\
+YOLO detects \textit{all} visible persons but does not guarantee consistent labelling across frames. A lightweight greedy tracker resolves this: the bounding-box centroids detected in frame $t$ are matched to the two tracked identities from frame $t-1$ by minimising centroid distance. The two largest boxes in the first valid frame initialise identities 0 and 1. This stage produces two arrays of shape \texttt{(T, 17, 2)} (positions) and \texttt{(T, 17)} (confidences) for each person, where \(T = 3{,}864\).
+
+\vspace{0.5em}
+\noindent\textbf{Stage 6 — Data Cleaning \& Noise Reduction}\\
+Raw keypoint data is noisy. Three preprocessing operations are applied in sequence:
 \begin{enumerate}
-    \item \textbf{Environment Setup}: Configuration of dependencies and verification of GPU/MPS acceleration
-    \item \textbf{Model Initialization}: Loading the YOLO11n-pose model for pose estimation
-    \item \textbf{Video Processing}: Frame-by-frame extraction and preprocessing
-    \item \textbf{Pose Estimation}: Detection of body keypoints for all individuals in each frame
-    \item \textbf{Identity Tracking}: Consistent identification and tracking of individuals across frames
-    \item \textbf{Data Preprocessing}: Cleaning, interpolation, and smoothing of pose data
-    \item \textbf{Signal Processing}: Computation of velocity and movement metrics
-    \item \textbf{Synchrony Analysis}: Calculation of cross-correlation and co-crossing metrics
+    \item \textit{Confidence masking}: keypoints with confidence $< 0.3$ are replaced with \texttt{NaN}.
+    \item \textit{Linear interpolation}: gaps of up to $\lfloor 0.3 \times fps \rfloor \approx 7$ frames (300\,ms) are filled by linearly interpolating between valid neighbours.
+    \item \textit{Gaussian smoothing}: a Gaussian kernel ($\sigma = 3$ frames) is convolved with each joint trajectory to reduce frame-to-frame jitter while preserving genuine motion.
 \end{enumerate}
+
+\vspace{0.5em}
+\noindent\textbf{Stage 7 — Signal Construction: Group Velocity}\\
+Rather than analysing all 17 joints independently, keypoints are grouped anatomically (upper body, torso, lower body). For each group, the instantaneous velocity of each joint is computed via finite differences and the group signal is the mean velocity across joints. This reduces dimensionality, suppresses occlusion-induced artefacts, and yields three biologically interpretable movement time series per person.
+
+\vspace{0.5em}
+\noindent\textbf{Stage 8 — Synchrony Analysis}\\
+Three complementary metrics are computed from the group velocity signals:
+\begin{itemize}
+    \item \textbf{Lagged cross-correlation} — global synchrony estimate with permutation significance test.
+    \item \textbf{Rolling (windowed) correlation} — time-varying synchrony, revealing phases of coupling and uncoupling.
+    \item \textbf{Dyadic co-crossing (approach synchrony)} — event-based metric counting simultaneous head-lean-toward events.
+\end{itemize}
 
 \subsection{Pose Estimation Model}
 The project utilizes YOLO11n-pose, the latest iteration of the YOLO family designed specifically for pose estimation tasks. YOLO11 represents significant improvements over previous versions:
@@ -228,33 +259,65 @@ Raw pose data requires several preprocessing steps:
 
 \subsection{Synchrony Metrics}
 
-\subsubsection{Velocity-Based Analysis}
-Movement velocity is computed from positional changes:
+\subsubsection{Group Velocity Signal}
+Before any synchrony computation, joint-level coordinates are converted into a single scalar motion signal per body region per person. For a set of joints $\mathcal{G}$ (e.g.\ upper body), the group velocity at time $t$ is:
 
 \begin{equation}
-    v_t = \sqrt{(\Delta x_t)^2 + (\Delta y_t)^2}
+    V_t^{(\mathcal{G})} = \frac{1}{|\mathcal{G}|} \sum_{k \in \mathcal{G}}
+        \frac{\sqrt{(\Delta x_{k,t})^2 + (\Delta y_{k,t})^2}}{dt}
 \end{equation}
 
-where $\Delta x_t = x_t - x_{t-1}$ and $\Delta y_t = y_t - y_{t-1}$ represent frame-to-frame positional changes.
+where $\Delta x_{k,t} = x_{k,t} - x_{k,t-1}$, $\Delta y_{k,t} = y_{k,t} - y_{k,t-1}$, and $dt = 1/fps$ is the frame interval in seconds. NaN values from masked or missing keypoints are excluded from the group mean, ensuring that partial occlusions do not corrupt the entire signal.
 
-\subsubsection{Cross-Correlation}
-Cross-correlation quantifies the similarity between two movement signals with varying time lags:
+\subsubsection{Lagged Cross-Correlation with Permutation Test}
+Lagged cross-correlation measures global synchrony by computing the Pearson correlation between the two z-scored velocity signals across a range of temporal lags $\tau \in [-\tau_{\max}, +\tau_{\max}]$:
 
 \begin{equation}
-    R_{xy}(\tau) = \frac{\sum_{t} (x_t - \bar{x})(y_{t+\tau} - \bar{y})}{\sqrt{\sum_{t} (x_t - \bar{x})^2 \sum_{t} (y_t - \bar{y})^2}}
+    R_{AB}(\tau) = \frac{\sum_{t} z_A(t) \cdot z_B(t + \tau)}{N}
 \end{equation}
 
-where $\tau$ is the time lag, and $\bar{x}$, $\bar{y}$ are the mean values of the signals.
+where $z_A$ and $z_B$ are the z-scored velocity signals of persons A and B, and $N$ is the number of valid (non-NaN) frame pairs. The \textit{peak correlation} $r^* = \max_\tau |R_{AB}(\tau)|$ and its corresponding \textit{lag} $\tau^*$ are reported.
 
-\subsubsection{Co-Crossing Events (Approach Synchrony)}
-Co-crossing analysis detects simultaneous changes in movement patterns:
+\vspace{0.5em}
+\noindent\textbf{Significance via Circular Permutation Test:}
+Because the two signals are temporally autocorrelated (movement at frame $t$ predicts movement at frame $t+1$), standard parametric tests for correlation are invalid. Instead, we use a \textit{circular shift permutation test}: Person B's signal is rolled by a random lag (drawn uniformly from $[fps, T - fps]$ to avoid near-zero shifts), and the peak correlation of the shifted pair is recorded. Repeating this 500 times builds a null distribution of peak correlations that would be expected by chance. The $p$-value is the proportion of permuted correlations exceeding the observed $r^*$, yielding a properly calibrated test of whether the observed correlation is larger than what random temporal alignment would produce.
 
+\subsubsection{Rolling (Windowed) Synchrony}
+The lagged cross-correlation provides a single summary statistic for the entire recording. To capture \textit{time-varying} coupling, a rolling Pearson correlation is computed within a sliding window of $w$ frames (here $w = 50$ frames $\approx 2\,\text{s}$):
+
+\begin{equation}
+    r_t = \text{Pearson}\bigl(z_A(t-w+1:t),\; z_B(t-w+1:t)\bigr)
+\end{equation}
+
+The resulting time series $r_t$ reveals moments of tight synchrony (high $r_t$), turn-taking or anti-phase movement (negative $r_t$), and uncoupled motion ($r_t \approx 0$).
+
+\vspace{0.5em}
+\noindent\textbf{Permutation-derived phase thresholds:}
+To label each window as \textit{synchronised}, \textit{turn-taking}, or \textit{uncoupled}, the same circular permutation procedure is applied to derive a significance band. A window is classed as synchronised if $r_t > r_{0.95}^{\text{perm}}$ (95th percentile of the permuted distribution) and as turn-taking if $r_t < r_{0.05}^{\text{perm}}$ (5th percentile). Percentages of time spent in each phase are then reported alongside the dominant behavioural pattern.
+
+\subsubsection{Dyadic Co-Crossing (Approach Synchrony)}
+This event-based metric captures \textit{head approach} synchrony — moments when both individuals simultaneously lean their heads \textit{toward} the other person relative to their own neutral (resting) position.
+
+\vspace{0.5em}
+\noindent\textbf{Step 1 — Head centroid:} A single 2D head position is computed as the mean of five facial keypoints: nose, left ear, right ear, left eye, and right eye.
+
+\vspace{0.5em}
+\noindent\textbf{Step 2 — Resting baseline:} The median x-coordinate of each person's head across the full recording defines a \textit{resting vertical line}. Displacement from this baseline (positive = toward the partner, negative = away) forms the signed signal $s_t$.
+
+\vspace{0.5em}
+\noindent\textbf{Step 3 — Hysteresis event detection:} A state machine with hysteresis detects \textit{approach events}:
 \begin{itemize}
-    \item \textbf{Threshold Crossing}: Identify when velocity crosses a threshold value
-    \item \textbf{Hysteresis}: Apply different thresholds for entering/exiting states to reduce noise
-    \item \textbf{Temporal Pairing}: Count events where both individuals cross thresholds within a temporal window
-    \item \textbf{Synchrony Score}: Ratio of co-crossing events to total crossing events
+    \item The signal must first fall to $s_t \leq -\theta$ and \textit{dwell} there for $\lfloor 2 \cdot fps \rfloor$ frames to confirm the ``away'' state.
+    \item A transition to the ``toward'' state is confirmed only when $s_t \geq +\theta$ is sustained for the same dwell duration.
+    \item This double-threshold (hysteresis) design prevents noisy oscillations around zero from generating spurious events.
 \end{itemize}
+
+\vspace{0.5em}
+\noindent\textbf{Step 4 — Temporal pairing (co-crossing):} Detected events from Person A and Person B are matched using a greedy nearest-neighbour algorithm. A pair is counted as a \textit{co-crossing} if the two events fall within a temporal window of $\pm 2\,\text{s}$. The \textbf{co-crossing synchrony score} is defined as:
+
+\begin{equation}
+    \text{Score} = \frac{2 \times |\text{matched pairs}|}{|\text{events}_A| + |\text{events}_B|}
+\end{equation}
 
 \subsection{Tools and Technologies}
 \begin{itemize}
@@ -274,10 +337,11 @@ Co-crossing analysis detects simultaneous changes in movement patterns:
 The YOLO11n-pose model successfully detected and tracked two individuals throughout the video sequence. Key performance metrics include:
 
 \begin{itemize}
-    \item \textbf{Detection Rate}: Consistent detection of both individuals across 3,864 frames
-    \item \textbf{Tracking Stability}: Maintained consistent identity labels with minimal ID switching
-    \item \textbf{Keypoint Confidence}: High average confidence scores for visible keypoints
-    \item \textbf{Processing Speed}: Real-time capable processing (>25 FPS on appropriate hardware)
+    \item \textbf{Video Duration}: 3,864 frames at 25.006 FPS ($\approx$154.5 seconds / 2.6 minutes)
+    \item \textbf{Temporal Resolution}: $dt = 0.040\,\text{s}$ per frame
+    \item \textbf{Tracking}: Both persons continuously tracked from frame 0 to frame 3,863 (IDs 0 and 1)
+    \item \textbf{Data Shape}: Each tracked person yields arrays of shape \texttt{(3864, 17, 2)} for positions and \texttt{(3864, 17)} for confidences
+    \item \textbf{Confidence Threshold}: Keypoints with confidence $< 0.30$ were masked before analysis
 \end{itemize}
 
 \subsection{Preprocessing Outcomes}
@@ -299,45 +363,130 @@ Figure~\ref{fig:preprocessing} illustrates the effects of different preprocessin
     \label{fig:preprocessing}
 \end{figure}
 
-\subsection{Movement Analysis}
-Velocity analysis revealed distinct patterns of movement for both individuals:
+\subsection{Movement Signals}
+Figure~\ref{fig:velocity} shows the torso velocity time series for both individuals across the full recording. Person 0 (blue) and Person 1 (orange) exhibit intermittent bursts of movement separated by low-activity periods, consistent with natural conversational dynamics (gesture, head nodding, turn-taking pauses).
 
-\begin{itemize}
-    \item \textbf{Movement Magnitude}: Quantified overall activity levels for each person
-    \item \textbf{Temporal Patterns}: Identified periods of high and low activity
-    \item \textbf{Body Part Coordination}: Analyzed movements of specific body regions
-\end{itemize}
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=\textwidth]{../data_output/velocity_signals.png}
+    \caption{Torso group velocity (pixels/second) for Person 0 (blue) and Person 1 (orange) over the full recording ($\approx$154.5 seconds). Peaks correspond to active gestural or postural movements.}
+    \label{fig:velocity}
+\end{figure}
 
 \subsection{Synchrony Metrics}
 
-\subsubsection{Cross-Correlation Results}
-Cross-correlation analysis between the movement signals of the two individuals revealed:
+\subsubsection{Lagged Cross-Correlation Results}
+Table~\ref{tab:lagged_cross} reports the observed peak cross-correlation coefficient, the 95th-percentile null value derived from 500 circular-shift permutations, and the corresponding $p$-value for each body region.
+
+\begin{table}[H]
+    \centering
+    \caption{Lagged cross-correlation synchrony results (max $|r|$ within $\pm$2 s lag). Significance assessed by circular-shift permutation test ($n_{\text{perm}} = 500$).}
+    \label{tab:lagged_cross}
+    \begin{tabular}{lccc}
+        \hline
+        \textbf{Body region} & \textbf{Observed $r$} & \textbf{Null max $r$} & \textbf{$p$ (perm)} \\
+        \hline
+        Upper body & $-0.08$ & $0.24$ & $0.864$ \\
+        Torso      & $\phantom{-}0.04$ & $0.22$ & $0.535$ \\
+        Lower body & $\phantom{-}0.14$ & $0.12$ & $\mathbf{0.003}$ \\
+        \hline
+    \end{tabular}
+\end{table}
+
+The upper body and torso showed no significant synchrony (both $p > 0.05$). The lower body yielded a small but statistically significant positive correlation ($r = 0.14$, $p = 0.003$), suggesting that leg and hip movements were weakly coupled across the two individuals. The best-fitting lag for lower body was $\tau^* \approx -0.08\,\text{s}$ (nearly simultaneous), consistent with co-occurrence rather than a clear leader-follower structure.
+
+\subsubsection{Rolling Synchrony Results}
+Figure~\ref{fig:rolling} shows the rolling Pearson correlation (2-second window) for all three body regions, with permutation-derived synchrony (green) and turn-taking (red) thresholds overlaid.
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=\textwidth]{../data_output/rolling_synchrony.png}
+    \caption{Rolling Pearson correlation ($w = 50$ frames $\approx 2\,\text{s}$) between the movement signals of the two individuals for upper body, torso, and lower body. Green dashed line: synchrony threshold; red dashed line: turn-taking threshold.}
+    \label{fig:rolling}
+\end{figure}
+
+Figures~\ref{fig:perm_upper}--\ref{fig:perm_lower} show the permutation-threshold plots for each body region individually.
+
+\begin{figure}[H]
+    \centering
+    \begin{minipage}[t]{0.47\textwidth}
+        \centering
+        \includegraphics[width=\textwidth]{../data_output/rolling_upper_perm.png}
+        \caption{Upper body rolling synchrony with permutation thresholds.}
+        \label{fig:perm_upper}
+    \end{minipage}
+    \hfill
+    \begin{minipage}[t]{0.47\textwidth}
+        \centering
+        \includegraphics[width=\textwidth]{../data_output/rolling_torso_perm.png}
+        \caption{Torso rolling synchrony with permutation thresholds.}
+        \label{fig:perm_torso}
+    \end{minipage}
+\end{figure}
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=0.55\textwidth]{../data_output/rolling_lower_perm.png}
+    \caption{Lower body rolling synchrony with permutation thresholds.}
+    \label{fig:perm_lower}
+\end{figure}
+
+Table~\ref{tab:rolling} summarises the phase classification results.
+
+\begin{table}[H]
+    \centering
+    \caption{Rolling synchrony phase classification across the full recording (window $\approx 2\,\text{s}$). Thresholds derived from circular-shift permutation ($n_{\text{perm}} = 500$).}
+    \label{tab:rolling}
+    \begin{tabular}{lcccccc}
+        \hline
+        \textbf{Region} & \textbf{Sync thr.} & \textbf{Anti thr.} & \textbf{\% Sync} & \textbf{\% Turn-taking} & \textbf{\% Uncoupled} & \textbf{Dominant} \\
+        \hline
+        Upper body & $0.53$ & $-0.47$ & $4.1$ & $1.8$ & $94.1$ & Uncoupled \\
+        Torso      & $0.45$ & $-0.42$ & $5.0$ & $1.3$ & $93.6$ & Uncoupled \\
+        Lower body & $0.46$ & $-0.39$ & $3.7$ & $0.2$ & $96.1$ & Uncoupled \\
+        \hline
+    \end{tabular}
+\end{table}
+
+Across all three body regions, the interaction was dominated by uncoupled motion ($>93\%$ of windows). Synchronised windows comprised between 3.7\% and 5.0\% of the recording, while turn-taking windows were rare ($<2\%$). These results are consistent with the lagged cross-correlation findings and suggest that, globally, the dyad showed limited movement coordination in this recording.
+
+\subsubsection{Dyadic Co-Crossing (Approach Synchrony)}
+Figure~\ref{fig:head_traj} shows the spatial trajectories of each individual's head centroid across the full recording. Person 1 (left panel) exhibits a wider lateral range of motion compared to Person 2 (right panel).
+
+\begin{figure}[H]
+    \centering
+    \begin{minipage}[t]{0.47\textwidth}
+        \centering
+        \includegraphics[width=\textwidth]{../data_output/head_trajectory_p1.png}
+        \caption{Head centroid trajectory for Person 1. Green marker: start; red marker: end.}
+        \label{fig:head_p1}
+    \end{minipage}
+    \hfill
+    \begin{minipage}[t]{0.47\textwidth}
+        \centering
+        \includegraphics[width=\textwidth]{../data_output/head_trajectory_p2.png}
+        \caption{Head centroid trajectory for Person 2. Green marker: start; red marker: end.}
+        \label{fig:head_p2}
+    \end{minipage}
+\end{figure}
+
+Figure~\ref{fig:head_both} overlays both trajectories with each person's median resting x-position (dashed lines), which serves as the baseline for the approach signal.
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=0.65\textwidth]{../data_output/head_trajectories_both.png}
+    \caption{Overlaid head trajectories for both individuals. Vertical dashed lines indicate each person's median x-position (resting baseline). Rightward displacement from the baseline for Person 1 (or leftward for Person 2) constitutes an ``approach'' movement toward the partner.}
+    \label{fig:head_both}
+\end{figure}
+
+The hysteresis event detector (threshold $\theta = $ median absolute deviation, dwell $= 2\,\text{s}$) identified the following approach events:
 
 \begin{itemize}
-    \item \textbf{Zero-Lag Correlation}: Indicates simultaneous movement patterns
-    \item \textbf{Lagged Correlation}: Suggests leader-follower dynamics
-    \item \textbf{Peak Correlation Values}: Quantifies strength of synchrony
+    \item \textbf{Person 1}: 2 approach events (at frames 736 and 3,184; $t \approx 29.4\,\text{s}$ and $127.3\,\text{s}$)
+    \item \textbf{Person 2}: 6 approach events (at frames 518, 961, 1,126, 1,597, 2,409, and 3,405; $t \approx 20.7$, $38.4$, $45.0$, $63.9$, $96.3$, and $136.2\,\text{s}$)
 \end{itemize}
 
-\subsubsection{Co-Crossing Analysis}
-The co-crossing metric provided complementary information:
-
-\begin{itemize}
-    \item \textbf{Event Count}: Total number of threshold crossings for each individual
-    \item \textbf{Co-Crossing Count}: Number of simultaneous crossing events
-    \item \textbf{Synchrony Ratio}: Proportion of coordinated movement events
-\end{itemize}
-
-\subsection{Visualizations}
-The analysis pipeline generated several types of visualizations:
-
-\begin{itemize}
-    \item \textbf{Annotated Frames}: Pose keypoints overlaid on video frames
-    \item \textbf{Trajectory Plots}: Movement paths of key body points over time
-    \item \textbf{Velocity Time Series}: Movement magnitude across the interaction
-    \item \textbf{Cross-Correlation Plots}: Correlation values at different time lags
-    \item \textbf{Event Timing Diagrams}: Temporal distribution of co-crossing events
-\end{itemize}
+The greedy temporal-pairing algorithm found \textbf{0 co-crossing pairs} within the $\pm 2\,\text{s}$ matching window. The small number of Person 1 events (2 total) and their timing relative to Person 2's events meant that no pair fell within the required window. This result indicates that explicit head-approach synchrony was absent in this recording, though it does not preclude subtler postural coordination captured by the velocity-based metrics.
 
 % Discussion
 \section{Discussion}
@@ -346,10 +495,13 @@ The analysis pipeline generated several types of visualizations:
 The results demonstrate that computer vision-based pose estimation can effectively quantify social synchrony in dyadic interactions. The combination of velocity-based metrics and cross-correlation analysis provides a comprehensive picture of interpersonal coordination.
 
 \textbf{Synchrony Patterns:}
-The observed synchrony patterns suggest that the two individuals exhibited coordinated movements during their interaction. High cross-correlation values at zero lag indicate simultaneous movement, while non-zero lag peaks may reflect turn-taking or response patterns.
+Across all three metrics, the dominant pattern in this recording was \textit{uncoupled} motion ($>93\%$ of windows in rolling analysis). However, the lower-body velocity showed a small but statistically significant positive lagged cross-correlation ($r = 0.14$, $p = 0.003$) at near-zero lag, suggesting a degree of simultaneous lower-limb coordination — plausibly reflecting shared postural rhythms (e.g.\ mirrored seated repositioning) rather than deliberate gestural synchrony.
+
+\textbf{Rolling Synchrony:}
+While the global correlation was weak, the rolling analysis reveals that synchronised windows do occur transiently (4--5\% of the recording), punctuating extended periods of independent motion. This episodic structure is consistent with prior literature suggesting that synchrony in natural conversation is not continuous but emerges at key interactional moments.
 
 \textbf{Co-Crossing Events:}
-The co-crossing analysis captures moments of coordinated changes in movement states, which may correspond to important interaction events such as mutual engagement, turn transitions, or joint attention.
+The absence of co-crossing pairs (0 matched pairs) reflects the sparse and temporally non-overlapping approach events detected for the two individuals. Person 2 moved toward Person 1 six times, while Person 1 did so only twice, and these events did not co-occur within the 2-second matching window. This asymmetry may reflect a difference in conversational roles or engagement styles, and warrants follow-up with a larger sample.
 
 \subsection{Methodological Considerations}
 
